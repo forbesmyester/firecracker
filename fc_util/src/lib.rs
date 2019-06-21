@@ -39,6 +39,17 @@ pub fn now_cputime_us() -> u64 {
     timespec_to_us(&time_struct)
 }
 
+// This generates pseudo random u32 numbers based on the current timestamp. Only works for x86_64,
+// but can find something else if we ever need to support different architectures.
+pub fn xor_rng_u32() -> u32 {
+    let mut t: u32 = timestamp_cycles() as u32;
+    // Taken from https://en.wikipedia.org/wiki/Xorshift
+    t ^= t << 13;
+    t ^= t >> 17;
+    t ^ (t << 5)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,4 +67,12 @@ mod tests {
             assert!(now_cputime_us() <= now_cputime_us());
         }
     }
+
+    #[test]
+    fn test_xor_rng_u32() {
+        for _ in 0..1000 {
+            assert_ne!(xor_rng_u32(), xor_rng_u32());
+        }
+    }
+
 }
