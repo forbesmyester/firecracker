@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 extern crate libc;
+use std::ffi::OsString;
+use std::str;
 
 pub mod validators;
 
@@ -50,6 +52,41 @@ pub fn xor_rng_u32() -> u32 {
 }
 
 
+fn xor_rng_u8_alphanumerics(rand_fn: &Fn() -> u32) -> Vec<u8> {
+    let mut r = vec!();
+    for n in &rand_fn().to_ne_bytes() {
+        if (48..58).contains(n) || (65..91).contains(n) || (97..123).contains(n) {
+            r.push(*n);
+        }
+    }
+    r
+}
+
+
+fn rand_alphanumerics_impl(rand_fn: &Fn() -> u32, len: usize) -> OsString {
+
+    let mut buf = OsString::new();
+    let mut done = 0;
+    loop {
+        for n in xor_rng_u8_alphanumerics(rand_fn) {
+            done = done + 1;
+            buf.push(str::from_utf8(&[n]).unwrap_or("_"));
+            // unsafe { // Safe because the bounds of n are defined as [a-zA-Z0-9]
+            //     buf.push(str::from_utf8_unchecked(&[n]));
+            // }
+            if done >= len {
+                return buf;
+            }
+        }
+    }
+}
+
+
+pub fn rand_alphanumerics(len: usize) -> OsString {
+    return rand_alphanumerics_impl(&xor_rng_u32, len);
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,6 +110,25 @@ mod tests {
         for _ in 0..1000 {
             assert_ne!(xor_rng_u32(), xor_rng_u32());
         }
+    }
+
+    #[test]
+    fn test_xor_rng_u8_alphas() {
+        let s = xor_rng_u8_alphanumerics(&|| { 14134 });
+        assert_eq!(vec![54, 55], s);
+    }
+
+    #[test]
+    fn test_rand_alphanumerics_impl() {
+        let s = rand_alphanumerics_impl(&|| { 14134 }, 5);
+        println!("{:?}", s);
+        assert_eq!("67676", s);
+    }
+
+    #[test]
+    fn test_rand_alphanumerics() {
+        let s = rand_alphanumerics(5);
+        assert_eq!(5, s.len());
     }
 
 }
