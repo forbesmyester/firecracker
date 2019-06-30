@@ -6,6 +6,7 @@ use std::ffi::OsString;
 use std::str;
 
 pub mod validators;
+pub mod fs;
 
 pub fn timestamp_cycles() -> u64 {
     #[cfg(target_arch = "x86_64")]
