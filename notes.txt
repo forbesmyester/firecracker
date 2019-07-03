@@ -1,0 +1,151 @@
+# == NamedTempFile ====================================================
+use self::tempfile::{tempfile, tempdir, tempdir_in, NamedTempFile};
+
+tempfile::NamedTempFile::new().to_path_buf().to_str().unwrap()
+
+NamedTempFile::new_in(tempdir().path())
+
+let f: std::fs::File = tempfile().unwrap();
+
+tempdir_in(tempdir().expect("Cannot create temporary directory.").path())
+
+NamedTempFile::new_in(dir)
+        util::create_helper(
+            dir.as_ref(),
+            self.prefix,
+            self.suffix,
+            self.random_len,
+            |path| {
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .open(path.is_absolute() ? path : env::current_dir()?.join(path))
+                    .with_err_path(|| path.clone())
+                    .map(|file| NamedTempFile {
+                        path: TempPath { path },
+                        file,
+                    })
+            }
+        )
+
+# == tempfile_in ============================================
+
+src/file/mod.rs:98
+pub fn tempfile_in<P: AsRef<Path>>(dir: P) -> io::Result<File>
+
+src/file/imp/unix.rs:62
+pub fn create(dir: &Path) -> io::Result<File>
+
+src/file/imp/unix.rs:83
+fn create_unix(dir: &Path) -> io::Result<File>
+// create_helper
+
+src/file/imp/unix.rs:44
+fn create_unlinked(path: &Path) -> io::Result<File>
+// let f = create_named(path)?;
+// let _ = fs::remove_file(path);
+// Ok(f)
+
+# == tempfile ================================================
+
+pub fn tempfile() -> io::Result<File> {
+    tempfile_in(&env::temp_dir())
+}
+
+
+pub fn tempfile_in<P: AsRef<Path>>(dir: P) -> io::Result<File> {
+    use libc::{EISDIR, ENOENT, EOPNOTSUPP, O_EXCL, O_TMPFILE};
+
+    let tmp;
+    // shadow this to decrease the lifetime. It can't live longer than `tmp`.
+    let mut path = path;
+    if !path.is_absolute() {
+        let cur_dir = env::current_dir()?;
+        tmp = cur_dir.join(path);
+        path = &tmp;
+    }
+
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+
+
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(O_TMPFILE | O_EXCL) // do not mix with `create_new(true)`
+        .open(dir)
+        .or_else(|e| {
+            match e.raw_os_error() {
+                // These are the three "not supported" error codes for O_TMPFILE.
+                Some(EOPNOTSUPP) | Some(EISDIR) | Some(ENOENT) => create_unix(dir),
+                _ => Err(e),
+            }
+        })
+}
+
+fn create_unix(dir: &Path) -> io::Result<File> {
+    util::create_helper(
+        dir,
+        OsStr::new(".tmp"),
+        OsStr::new(""),
+        ::NUM_RAND_CHARS,
+        |path| create_unlinked(&path),
+    )
+}
+
+fn create_unlinked(path: &Path) -> io::Result<File> {
+    let tmp;
+
+    // shadow this to decrease the lifetime. It can't live longer than `tmp`.
+    let mut path = path;
+    if !path.is_absolute() {
+        let cur_dir = env::current_dir()?;
+        tmp = cur_dir.join(path);
+        path = &tmp;
+    }
+
+    let f = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path);
+
+    // don't care whether the path has already been unlinked,
+    // but perhaps there are some IO error conditions we should send up?
+    let _ = fs::remove_file(path);
+    Ok(f)
+}
+
+# == tempdir / tempdir_in =================================================
+
+pub fn tempdir() -> io::Result<TempDir> {
+    TempDir::new()
+}
+
+pub fn tempdir_in<P: AsRef<Path>>(dir: P) -> io::Result<TempDir> {
+    TempDir::new_in(dir)
+}
+
+pub fn tempdir(&self) -> io::Result<TempDir> {
+    self.tempdir_in(&env::temp_dir())
+}
+
+pub fn tempdir_in<P: AsRef<Path>>(&self, dir: P) -> io::Result<TempDir> {
+    let storage;
+    let mut dir = dir.as_ref();
+    if !dir.is_absolute() {
+        let cur_dir = env::current_dir()?;
+        storage = cur_dir.join(dir);
+        dir = &storage;
+    }
+
+    util::create_helper(dir, self.prefix, self.suffix, self.random_len, dir::create)
+}
+
